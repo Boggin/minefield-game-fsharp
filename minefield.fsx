@@ -1,3 +1,5 @@
+open System
+
 type Row = Row of int
 type Col = Col of int
 
@@ -35,30 +37,65 @@ type GameState =
     | Won of Game
     | Lost of Game
 
-let mines =
-    [ { Position =
-          { x = (Row 1)
-            y = (Col 1) } }
-      { Position =
-          { x = (Row 2)
-            y = (Col 2) } } ]
-
 let player =
     { Lives = 3
       Position =
         { x = (Row 0)
           y = (Col 0) } }
 
+// 8x8 chessboard.
 let board =
     { Limit =
-        { x = (Row 8)
-          y = (Col 8) } }
+        { x = (Row 7)
+          y = (Col 7) } }
 
-let moved (player: Player) (position: Position) mines =
-    let isMine (position: Position) =
+let placeMines (board: Board) (n: int) =
+    let addRow (Row row) = row + 1
+    let addCol (Col col) = col + 1
+    let random = Random()
+
+    let rec placeMines' (mines: Mine list) =
+        if mines.Length = n then
+            mines
+        else
+            let row = random.Next(0, addRow board.Limit.x)
+            let col = random.Next(0, addCol board.Limit.y)
+
+            let position =
+                { x = (Row row)
+                  y = (Col col) }
+
+            let mine = { Position = position }
+
+            if mines |> List.exists (fun mine -> mine.Position = position) then
+                placeMines' mines
+            else
+                placeMines' (mine :: mines)
+
+    placeMines' []
+
+let setup =
+    Active
+        { Player = player
+          Mines = placeMines board 12
+          Board = board
+          History = [] }
+
+let nextPosition position direction =
+    let addCol (Col col) (Col n) = Col(col + n)
+    let addRow (Row row) (Row n) = Row(row + n)
+
+    match direction with
+    | Left -> { position with x = addRow position.x (Row -1) }
+    | Down -> { position with y = addCol position.y (Col -1) }
+    | Up -> { position with y = addCol position.y (Col 1) }
+    | Right -> { position with x = addRow position.x (Row 1) }
+
+let moved player position mines =
+    let isMine position =
         mines |> List.exists (fun mine -> mine.Position = position)
 
-    let isOutOfBounds (position: Position) =
+    let isOutOfBounds position =
         position.x < (Row 0)
         || position.x > board.Limit.x
         || position.y < (Col 0)
@@ -74,19 +111,11 @@ let moved (player: Player) (position: Position) mines =
     else
         Moved { player with Position = position }
 
-let nextPosition (position: Position) (direction: Direction) : Position =
-    let addCol (Col col) (Col n) = Col(col + n)
-    let addRow (Row row) (Row n) = Row(row + n)
+let move game direction =
+    let player = game.Player
 
-    match direction with
-    | Left -> { position with x = addRow position.x (Row -1) }
-    | Down -> { position with y = addCol position.y (Col -1) }
-    | Up -> { position with y = addCol position.y (Col 1) }
-    | Right -> { position with x = addRow position.x (Row 1) }
-
-let move (game: Game) (direction: Direction) : Game =
     let player' =
-        nextPosition game.Player.Position direction |> moved game.Player <| game.Mines
+        direction |> nextPosition player.Position |> moved player <| game.Mines
 
     match player' with
     | Moved player ->
@@ -101,14 +130,7 @@ let move (game: Game) (direction: Direction) : Game =
                 game.Mines
                 |> List.filter (fun mine -> mine.Position <> player.Position)
             History = player' :: game.History }
-    | OutOfBounds _ -> game
-
-let setup: GameState =
-    Active
-        { Player = player
-          Mines = mines
-          Board = board
-          History = [] }
+    | OutOfBounds _ -> { game with History = player' :: game.History }
 
 let update (gameState: GameState) (direction: Direction) : GameState =
     let hasDied player = player.Lives = 0
@@ -123,3 +145,66 @@ let update (gameState: GameState) (direction: Direction) : GameState =
         else Active game'
     | Won _
     | Lost _ -> gameState
+
+let display' game =
+    if game.History.Length > 0 then
+        let lastMove = game.History |> List.head
+
+        match lastMove with
+        | Moved _ -> printfn "You moved."
+        | Exploded _ -> printfn "You exploded!"
+        | OutOfBounds _ -> printfn "You went out of bounds!"
+
+    let addRow (Row row) = row + 1
+    let getChessNotation (Col col) = char (col + 65)
+
+    printfn
+        "Lives: %i, Moves: %i, Position: %O%i"
+        game.Player.Lives
+        game.History.Length
+        (getChessNotation game.Player.Position.y)
+        (addRow game.Player.Position.x)
+
+let display gameState =
+    match gameState with
+    | Active game -> display' game
+    | Won game ->
+        display' game
+        printfn "You Won!"
+    | Lost game ->
+        display' game
+        printfn "You Lost!"
+
+let start =
+    printfn
+        $"""
+    Cross the Minefield.
+    You start in the bottom, left-hand corner.
+    You must exit from the top, right-hand corner.
+    Left: a. Down: s. Up: w. Right: d."""
+
+    let rec play game =
+        let key = Console.ReadKey().KeyChar
+        printfn ""
+
+        let direction =
+            match key with
+            | 'w' -> Up
+            | 'a' -> Left
+            | 's' -> Down
+            | 'd' -> Right
+            | _ -> failwith "Invalid direction"
+
+        let game' = update game direction
+
+        match game' with
+        | Active _ ->
+            display game'
+            play game'
+        | Won _
+        | Lost _ -> display game'
+
+    play setup
+    printfn "Game Over"
+
+start
