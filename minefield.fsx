@@ -143,8 +143,7 @@ let update (gameState: GameState) (direction: Direction) : GameState =
         if game'.Player |> hasDied then Lost game'
         elif game'.Player |> hasEscaped game'.Board then Won game'
         else Active game'
-    | Won _
-    | Lost _ -> gameState
+    | _ -> gameState
 
 let display' game =
     if game.History.Length > 0 then
@@ -175,6 +174,8 @@ let display gameState =
         display' game
         printfn "You Lost!"
 
+exception InvalidDirection of string
+
 let start =
     printfn
         $"""
@@ -184,18 +185,23 @@ let start =
     Left: a. Down: s. Up: w. Right: d."""
 
     let rec play game =
-        let key = Console.ReadKey().KeyChar
-        printfn ""
 
-        let direction =
-            match key with
-            | 'w' -> Up
-            | 'a' -> Left
-            | 's' -> Down
-            | 'd' -> Right
-            | _ -> failwith "Invalid direction"
+        let rec getDirection () =
+            try
+                let key = Console.ReadKey().KeyChar
+                printfn ""
 
-        let game' = update game direction
+                match key with
+                | 'w' -> Up
+                | 'a' -> Left
+                | 's' -> Down
+                | 'd' -> Right
+                | _ -> raise (InvalidDirection "Invalid direction")
+            with e ->
+                printfn "%s. Try again!" e.Message
+                getDirection ()
+
+        let game' = getDirection () |> update game
 
         match game' with
         | Active _ ->
