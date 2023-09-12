@@ -1,4 +1,4 @@
-# Minefield Game
+# Minefield Game in F#
 
 ## Introduction
 
@@ -49,16 +49,18 @@ type GameState =
     | Lost of Game
 ```
 
-These states are things that would be tracked with flags in your code, like `isGameOver` or `hasWon`. The advantage with the type system is we can use the compiler to check that we've handled all the cases.
+These states are things that would normally be tracked with flags in your code, like `isGameOver` or `hasWon`. The advantage with the type system is we can use the compiler to check that we've handled all the cases.
 
-Once we've thought through a few Records and DU Types with which to model our domain we have a clear framework to hang our code on.
+Once we've thought through a few Records and DU types with which to model our domain we have a clear framework to hang our code on.
+
+## Pattern Matching
 
 When we want to update the game with the player's move we can use the GameState type:
 
 ```fsharp
 let update (gameState: GameState) (direction: Direction) : GameState =
     let hasDied player = player.Lives = 0
-    let hasEscaped board (player: Player) = player.Position = board.Limit
+    let hasEscaped board player = player.Position = board.Limit
 
     match gameState with
     | Active game ->
@@ -74,7 +76,7 @@ let update (gameState: GameState) (direction: Direction) : GameState =
  Note that Won and Lost here aren't doing anything but returning the game state. They wouldn't be called if the game was won or lost but the compiler is checking for them. We could just ignore these other elements of the DU but that's giving up an advantage of the language. So why have the Won and Lost cases at all?
 
  ```fsharp
-let display gameState=
+let display gameState =
     match gameState with
     | Active game -> display' game
     | Won game ->
@@ -89,14 +91,23 @@ The domain logic isn't coupled to the UI logic but the UI, such as it is, can st
 
 This code example also shows the simple power of pattern matching. We can rest easy knowing that all of the cases must be handled or the compiler will flag the error. We can also simply decompose the type to use the sub-types, for instance, to get the Game from the GameState.
 
+It may be taking it a little far but I've even created types for a column and a row for each position on the board.
+
 ```fsharp
 type Row = Row of int
 type Col = Col of int
 
 type Position = { x: Row y: Col }
+
+...
+    let addRow (Row row) (Row n) = Row(row + n)
+...
+    match direction with
+    | Left -> { position with x = addRow position.x (Row -1) }
+...
 ```
 
-It may be taking it a little far but I've even created types for a column and the row for each position on the board. Now we have to explicitly use row and column types when we create a position. It's a good example of how the type system can help us guard against silly errors.
+Now we have to explicitly use row and column types when we create a position. It's a good example of how the type system can help us guard against silly errors.
 
 ## Immutability
 
@@ -110,11 +121,11 @@ When we need to update the game state, say when the player has exploded and lost
                 Position = position }
 ```
 
-We have a guarantee that no part of our code can reach into the Lives field and change it without our being aware of it. You can also see from the given code example above that in using the `with` keyword we can easily create a new record with only the values updated that we explicitly want changed.
+We have a guarantee that no part of our code can reach into, for instance, the Lives field and change it without our being aware of it. You can also see from the above  code example that in using the `with` keyword we can easily create a new record with only the values updated that we explicitly want updated.
 
 ## Recursion
 
-It's the basis of a great deal of game code to have the game loop. If this were in an imperative language we'd have a `while` loop that would run until the game was over. In F# we can use recursion to achieve the same thing. We can even have inner loops by having recursive functions inside other recursive functions.
+It's the basis of a great deal of game code to have a game loop. If this were in an imperative language we'd have a `while` loop that would run until the game was over. In F# we tend to use recursion to achieve the same thing. We can even have inner loops by having recursive functions inside other recursive functions.
 
 ```fsharp
       let rec getDirection () =
@@ -140,3 +151,17 @@ In the above code we even have our own custom exception, InvalidDirection, that 
 exception InvalidDirection of string
 ```
 
+## Concision
+
+F# is a concise language. You may prefer its ability to see a large amount of meaningful code in each paragraph rather than a lot of punctuation.
+
+```fsharp
+    let player' =
+        direction |> nextPosition player.Position |> moved player <| game.Mines
+```
+
+A mixture of pipelines and function composition makes for very succinct code that's easy to hold in your head.
+
+## Conclusion
+
+The above code is no more than excerpts from a trivial script for a console game. It does illustrate how efficient F# is when you choose to model your domain first and foremost. The type system and the compiler will help you ensure that you've covered all the cases and that you're not making any silly mistakes. Hopefully you'll want to try and use F# for your next project and hopefully you'll avoid writing the next Enterprise FizzBuzz.

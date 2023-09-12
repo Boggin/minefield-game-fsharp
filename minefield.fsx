@@ -20,12 +20,6 @@ type Moved =
     | Exploded of Player
     | OutOfBounds of Player
 
-type Direction =
-    | Up
-    | Down
-    | Left
-    | Right
-
 type Game =
     { Player: Player
       Mines: Mine list
@@ -36,6 +30,12 @@ type GameState =
     | Active of Game
     | Won of Game
     | Lost of Game
+
+type Direction =
+    | Up
+    | Down
+    | Left
+    | Right
 
 let player =
     { Lives = 3
