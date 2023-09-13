@@ -1,11 +1,6 @@
 open System
 
-type Row = Row of int
-type Col = Col of int
-
-type Position =
-    { x: Row
-      y: Col }
+type Position = Position of x: int * y: int
 
 type Player =
     { Lives: int
@@ -39,31 +34,22 @@ type Direction =
 
 let player =
     { Lives = 3
-      Position =
-        { x = (Row 0)
-          y = (Col 0) } }
+      Position = Position(x = 0, y = 0) }
 
 // 8x8 chessboard.
-let board =
-    { Limit =
-        { x = (Row 7)
-          y = (Col 7) } }
+let board = { Limit = Position(x = 7, y = 7) }
 
-let placeMines (board: Board) (n: int) =
-    let addRow (Row row) = row + 1
-    let addCol (Col col) = col + 1
+let placeMines (Position(x = limitX; y = limitY)) (n: int) =
     let random = Random()
 
     let rec placeMines' (mines: Mine list) =
         if mines.Length = n then
             mines
         else
-            let row = random.Next(0, addRow board.Limit.x)
-            let col = random.Next(0, addCol board.Limit.y)
+            let row = random.Next(0, limitX + 1)
+            let col = random.Next(0, limitY + 1)
 
-            let position =
-                { x = (Row row)
-                  y = (Col col) }
+            let position = Position(x = row, y = col)
 
             let mine = { Position = position }
 
@@ -77,31 +63,28 @@ let placeMines (board: Board) (n: int) =
 let setup =
     Active
         { Player = player
-          Mines = placeMines board 12
+          Mines = placeMines board.Limit 12
           Board = board
           History = [] }
 
-let nextPosition position direction =
-    let addCol (Col col) (Col n) = Col(col + n)
-    let addRow (Row row) (Row n) = Row(row + n)
-
+let nextPosition (Position(x = row; y = col)) direction =
     match direction with
-    | Left -> { position with x = addRow position.x (Row -1) }
-    | Down -> { position with y = addCol position.y (Col -1) }
-    | Up -> { position with y = addCol position.y (Col 1) }
-    | Right -> { position with x = addRow position.x (Row 1) }
+    | Left -> Position(x = row - 1, y = col)
+    | Down -> Position(x = row, y = col - 1)
+    | Up -> Position(x = row, y = col + 1)
+    | Right -> Position(x = row + 1, y = col)
 
-let moved player position mines =
+let moved game position =
     let isMine position =
-        mines |> List.exists (fun mine -> mine.Position = position)
+        game.Mines |> List.exists (fun mine -> mine.Position = position)
 
-    let isOutOfBounds position =
-        position.x < (Row 0)
-        || position.x > board.Limit.x
-        || position.y < (Col 0)
-        || position.y > board.Limit.y
+    let isOutOfBounds
+        (Position(x = row; y = col))
+        (Position(x = limitX; y = limitY))
+        =
+        row < 0 || row > limitX || col < 0 || col > limitY
 
-    if isOutOfBounds position then
+    if isOutOfBounds position game.Board.Limit then
         OutOfBounds player
     elif isMine position then
         Exploded
@@ -112,10 +95,7 @@ let moved player position mines =
         Moved { player with Position = position }
 
 let move game direction =
-    let player = game.Player
-
-    let player' =
-        direction |> nextPosition player.Position |> moved player <| game.Mines
+    let player' = direction |> nextPosition player.Position |> moved game
 
     match player' with
     | Moved player ->
@@ -145,7 +125,15 @@ let update (gameState: GameState) (direction: Direction) : GameState =
         else Active game'
     | _ -> gameState
 
-let display' game =
+let display gameState =
+    let getGame =
+        function
+        | Active game
+        | Won game
+        | Lost game -> game
+
+    let game = getGame gameState
+
     if game.History.Length > 0 then
         let lastMove = game.History |> List.head
 
@@ -154,25 +142,19 @@ let display' game =
         | Exploded _ -> printfn "You exploded!"
         | OutOfBounds _ -> printfn "You went out of bounds!"
 
-    let addRow (Row row) = row + 1
-    let getChessNotation (Col col) = char (col + 65)
+    let getChessNotation (Position(x = row; y = col)) =
+        sprintf "%c%i" (char (col + 65)) (row + 1)
 
     printfn
-        "Lives: %i, Moves: %i, Position: %O%i"
+        "Lives: %i, Moves: %i, Position: %s"
         game.Player.Lives
         game.History.Length
-        (getChessNotation game.Player.Position.y)
-        (addRow game.Player.Position.x)
+        (getChessNotation game.Player.Position)
 
-let display gameState =
     match gameState with
-    | Active game -> display' game
-    | Won game ->
-        display' game
-        printfn "You Won!"
-    | Lost game ->
-        display' game
-        printfn "You Lost!"
+    | Active _ -> ()
+    | Won _ -> printfn "You Won!"
+    | Lost _ -> printfn "You Lost!"
 
 exception InvalidDirection of string
 
@@ -184,7 +166,7 @@ let start =
     You must exit from the top, right-hand corner.
     Left: a. Down: s. Up: w. Right: d."""
 
-    let rec play game =
+    let rec play gameState =
 
         let rec getDirection () =
             try
@@ -201,14 +183,13 @@ let start =
                 printfn "%s. Try again!" e.Message
                 getDirection ()
 
-        let game' = getDirection () |> update game
+        let gameState' = getDirection () |> update gameState
+        display gameState'
 
-        match game' with
-        | Active _ ->
-            display game'
-            play game'
+        match gameState' with
+        | Active _ -> play gameState'
         | Won _
-        | Lost _ -> display game'
+        | Lost _ -> ()
 
     play setup
     printfn "Game Over"
