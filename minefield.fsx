@@ -32,22 +32,15 @@ type Direction =
     | Left
     | Right
 
-let player =
-    { Lives = 3
-      Position = Position(x = 0, y = 0) }
-
-// 8x8 chessboard.
-let board = { Limit = Position(x = 7, y = 7) }
-
-let placeMines (Position(x = limitX; y = limitY)) (n: int) =
+let placeMines limit n =
     let random = Random()
 
     let rec placeMines' (mines: Mine list) =
         if mines.Length = n then
             mines
         else
-            let row = random.Next(0, limitX + 1)
-            let col = random.Next(0, limitY + 1)
+            let row = random.Next(0, limit + 1)
+            let col = random.Next(0, limit + 1)
 
             let position = Position(x = row, y = col)
 
@@ -61,9 +54,17 @@ let placeMines (Position(x = limitX; y = limitY)) (n: int) =
     placeMines' []
 
 let setup =
+    let player =
+        { Lives = 3
+          Position = Position(x = 0, y = 0) }
+
+    // 8x8 chessboard.
+    let boardLimit = 7
+    let board = { Limit = Position(x = boardLimit, y = boardLimit) }
+
     Active
         { Player = player
-          Mines = placeMines board.Limit 12
+          Mines = placeMines boardLimit 12
           Board = board
           History = [] }
 
@@ -85,17 +86,20 @@ let moved game position =
         row < 0 || row > limitX || col < 0 || col > limitY
 
     if isOutOfBounds position game.Board.Limit then
-        OutOfBounds player
+        OutOfBounds game.Player
     elif isMine position then
         Exploded
-            { player with
-                Lives = player.Lives - 1
+            { game.Player with
+                Lives = game.Player.Lives - 1
                 Position = position }
     else
-        Moved { player with Position = position }
+        Moved { game.Player with Position = position }
 
 let move game direction =
-    let player' = direction |> nextPosition player.Position |> moved game
+    let destroyMine =
+        game.Mines |> List.filter (fun mine -> mine.Position <> game.Player.Position)
+
+    let player' = direction |> nextPosition game.Player.Position |> moved game
 
     match player' with
     | Moved player ->
@@ -106,9 +110,7 @@ let move game direction =
         // Remove the mine that exploded.
         { game with
             Player = player
-            Mines =
-                game.Mines
-                |> List.filter (fun mine -> mine.Position <> player.Position)
+            Mines = destroyMine
             History = player' :: game.History }
     | OutOfBounds _ -> { game with History = player' :: game.History }
 
