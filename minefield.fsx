@@ -68,59 +68,57 @@ let setup =
           Board = board
           History = [] }
 
-let nextPosition (Position(x = row; y = col)) direction =
-    match direction with
-    | Left -> Position(x = row - 1, y = col)
-    | Down -> Position(x = row, y = col - 1)
-    | Up -> Position(x = row, y = col + 1)
-    | Right -> Position(x = row + 1, y = col)
-
-let moved game position =
-    let isMine position =
-        game.Mines |> List.exists (fun mine -> mine.Position = position)
+let move (gameState: GameState) (direction: Direction) : GameState =
+    let nextPosition (Position(x = row; y = col)) direction =
+        match direction with
+        | Left -> Position(x = row - 1, y = col)
+        | Down -> Position(x = row, y = col - 1)
+        | Up -> Position(x = row, y = col + 1)
+        | Right -> Position(x = row + 1, y = col)
 
     let isOutOfBounds
-        (Position(x = row; y = col))
         (Position(x = limitX; y = limitY))
+        (Position(x = row; y = col))
         =
         row < 0 || row > limitX || col < 0 || col > limitY
 
-    if isOutOfBounds position game.Board.Limit then
-        OutOfBounds game.Player
-    elif isMine position then
-        Exploded
-            { game.Player with
-                Lives = game.Player.Lives - 1
-                Position = position }
-    else
-        Moved { game.Player with Position = position }
+    let isMine mines position =
+        mines |> List.exists (fun mine -> mine.Position = position)
 
-let move game direction =
-    let destroyMine =
-        game.Mines |> List.filter (fun mine -> mine.Position <> game.Player.Position)
+    let destroyMine mines position =
+        mines |> List.filter (fun mine -> mine.Position <> position)
 
-    let player' = direction |> nextPosition game.Player.Position |> moved game
-
-    match player' with
-    | Moved player ->
-        { game with
-            Player = player
-            History = player' :: game.History }
-    | Exploded player ->
-        // Remove the mine that exploded.
-        { game with
-            Player = player
-            Mines = destroyMine
-            History = player' :: game.History }
-    | OutOfBounds _ -> { game with History = player' :: game.History }
-
-let update (gameState: GameState) (direction: Direction) : GameState =
     let hasDied player = player.Lives = 0
     let hasEscaped board (player: Player) = player.Position = board.Limit
 
     match gameState with
     | Active game ->
-        let game' = move game direction
+        let position' = direction |> nextPosition game.Player.Position
+
+        let player' =
+            if position' |> isOutOfBounds game.Board.Limit then
+                OutOfBounds game.Player
+            elif position' |> isMine game.Mines then
+                Exploded
+                    { game.Player with
+                        Lives = game.Player.Lives - 1
+                        Position = position' }
+            else
+                Moved { game.Player with Position = position' }
+
+        let game' =
+            match player' with
+            | Moved player ->
+                { game with
+                    Player = player
+                    History = player' :: game.History }
+            | Exploded player ->
+                // Remove the mine that exploded.
+                { game with
+                    Player = player
+                    Mines = destroyMine game.Mines player.Position
+                    History = player' :: game.History }
+            | OutOfBounds _ -> { game with History = player' :: game.History }
 
         if game'.Player |> hasDied then Lost game'
         elif game'.Player |> hasEscaped game'.Board then Won game'
@@ -185,7 +183,7 @@ let start =
                 printfn "%s. Try again!" e.Message
                 getDirection ()
 
-        let gameState' = getDirection () |> update gameState
+        let gameState' = getDirection () |> move gameState
         display gameState'
 
         match gameState' with
